@@ -1,0 +1,2 @@
+DROP INDEX "submission_metric_submission_date_unique";--> statement-breakpoint
+CREATE UNIQUE INDEX "submission_metric_submission_date_unique" ON "submission_metric" USING btree ("submission_id","captured_at");
