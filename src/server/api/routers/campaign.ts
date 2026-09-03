@@ -1,21 +1,17 @@
 import { and, eq, ilike, sql } from "drizzle-orm";
-import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 
 import { adminProcedure, createTRPCRouter } from "@/server/api/trpc";
 import { campaigns } from "@/server/db/schema";
-
-const campaignStatusValues = ["draft", "active", "paused", "completed"] as const;
-
-const campaignListInput = z.object({
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(10),
-  search: z.string().trim().optional().default(""),
-  status: z.enum(campaignStatusValues).optional(),
-});
+import {
+  campaignFormSchema,
+  campaignListInputSchema,
+  campaignUpdateInputSchema,
+} from "@/schemas/campaign";
 
 export const campaignRouter = createTRPCRouter({
   list: adminProcedure
-    .input(campaignListInput)
+    .input(campaignListInputSchema)
     .query(async ({ ctx, input }) => {
       const whereClauses = [];
 
@@ -51,5 +47,41 @@ export const campaignRouter = createTRPCRouter({
         total,
         totalPages: Math.max(Math.ceil(total / input.pageSize), 1),
       };
+    }),
+  create: adminProcedure
+    .input(campaignFormSchema)
+    .mutation(async ({ ctx, input }) => {
+      const [campaign] = await ctx.database
+        .insert(campaigns)
+        .values(input)
+        .returning();
+
+      if (!campaign) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Campaign could not be created.",
+        });
+      }
+
+      return campaign;
+    }),
+  update: adminProcedure
+    .input(campaignUpdateInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...values } = input;
+      const [campaign] = await ctx.database
+        .update(campaigns)
+        .set({ ...values, updatedAt: new Date() })
+        .where(eq(campaigns.id, id))
+        .returning();
+
+      if (!campaign) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Campaign not found.",
+        });
+      }
+
+      return campaign;
     }),
 });
