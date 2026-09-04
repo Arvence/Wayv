@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { DevUserSwitcher } from "@/components/dev-user-switcher";
+import { env } from "@/server/env";
 import { TRPCProvider } from "@/trpc/provider";
 
 import "./globals.css";
@@ -22,7 +23,7 @@ export default function RootLayout({
           <div className="min-h-screen">
             <header className="sticky top-0 z-50 border-b bg-background/95 shadow-sm backdrop-blur">
               <div className="mx-auto w-full max-w-[1600px] px-6 py-3">
-                <DevUserSwitcher />
+                <DevUserSwitcher demoAuthEnabled={env.DEMO_AUTH_ENABLED} />
               </div>
             </header>
             <div>{children}</div>

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createUserCookie } from "@/server/auth/cookie";
 import { createTRPCRouter, publicProcedure } from "@/server/api/trpc";
 import { users } from "@/server/db/schema";
+import { env } from "@/server/env";
 
 export const authRouter = createTRPCRouter({
   me: publicProcedure.query(({ ctx }) => {
@@ -12,9 +13,8 @@ export const authRouter = createTRPCRouter({
   }),
 
   devUsers: publicProcedure.query(async ({ ctx }) => {
-    const isProduction = (process.env.NODE_ENV ?? "") === "production";
-
-    if (isProduction) {
+    const demoAuthAllowed = env.NODE_ENV !== "production" || env.DEMO_AUTH_ENABLED;
+    if (!demoAuthAllowed) {
       return [];
     }
 
@@ -34,9 +34,10 @@ export const authRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const isProduction = (process.env.NODE_ENV ?? "") === "production";
+      const isProduction = env.NODE_ENV === "production";
+      const demoAuthAllowed = !isProduction || env.DEMO_AUTH_ENABLED;
 
-      if (isProduction) {
+      if (!demoAuthAllowed) {
         throw new TRPCError({
           code: "FORBIDDEN",
           message: "Dev user switching is disabled in production.",
@@ -61,7 +62,7 @@ export const authRouter = createTRPCRouter({
       }
 
       const cookieValue = createUserCookie(selectedUser.id);
-      const secureFlag = isProduction ? "; Secure" : "";
+      const secureFlag = isProduction ? " Secure" : "";
 
       ctx.resHeaders.append(
         "Set-Cookie",

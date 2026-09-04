@@ -2,8 +2,8 @@
 
 import { trpc } from "@/trpc/client";
 
-export function DevUserSwitcher() {
-  if (process.env.NODE_ENV === "production") {
+export function DevUserSwitcher({ demoAuthEnabled }: { demoAuthEnabled: boolean }) {
+  if (!demoAuthEnabled) {
     return null;
   }
 

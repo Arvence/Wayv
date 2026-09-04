@@ -23,6 +23,8 @@ Windows PowerShell copy command...
 
 Open localhost:5000
 
+Demo user switching is disabled by default. Set `DEMO_AUTH_ENABLED=true` only in a controlled demo environment.
+
 ## Useful commands
 pnpm ingest
 pnpm test

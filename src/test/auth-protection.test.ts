@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { database } from "@/server/db/client";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { submissionRouter } from "@/server/api/routers/submission";
+import { authRouter } from "@/server/api/routers/auth";
 import { users, submissions } from "@/server/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 
@@ -76,5 +77,22 @@ describe("auth protection", () => {
           )
       : [];
     expect(ownedRows).toHaveLength(result.length);
+  });
+
+  it("allows demo user switching in non-production and sets a protected cookie", async () => {
+    const [user] = await database.select().from(users).limit(1);
+    if (!user) throw new Error("A test user is required.");
+
+    const resHeaders = new Headers();
+    const result = await authRouter.createCaller({
+      database,
+      headers: new Headers(),
+      resHeaders,
+      user: null,
+    }).switchUser({ userId: user.id });
+
+    expect(result.id).toBe(user.id);
+    expect(resHeaders.get("Set-Cookie")).toContain("HttpOnly");
+    expect(resHeaders.get("Set-Cookie")).toContain("SameSite=Lax");
   });
 });
