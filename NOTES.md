@@ -59,3 +59,11 @@ Examples of corrections:
 - The first trend implementation compared unrelated daily chart values and produced misleading percentages.
 - The initial approval-only budget protection did not account for payout increases caused by later metric growth.
 - Initial URL validation only checked whether the input was a generic valid URL instead of validating platform-specific post URLs.
+
+## Metrics ingestion
+
+The `pnpm ingest` script is implemented and tested locally against PostgreSQL.
+
+The deployed demo uses Render's free tier, which does not provide an interactive shell or scheduled job execution for the web service. Because of that, ingestion is not run automatically in the hosted demo.
+
+The script can still be run manually against the configured PostgreSQL database by providing the deployment `DATABASE_URL`.
