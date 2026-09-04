@@ -53,7 +53,7 @@ export function CampaignForm({
 
       <label className="block text-sm">
         <span className="font-medium">Title</span>
-        <input className="mt-1 w-full rounded-md border px-3 py-2" {...form.register("title")} />
+        <input className="mt-1 w-full rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-slate-900 placeholder:text-slate-500" {...form.register("title")} />
         {errors.title && <span className="text-destructive">{errors.title.message}</span>}
       </label>
 
@@ -74,7 +74,7 @@ export function CampaignForm({
         <label className="block text-sm">
           <span className="font-medium">Payout per 1k views (cents)</span>
           <input
-            className="mt-1 w-full rounded-md border px-3 py-2"
+            className="mt-1 w-full rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-slate-900 placeholder:text-slate-500"
             type="number"
             min="0"
             {...form.register("payoutPer1kViews", { valueAsNumber: true })}
@@ -86,7 +86,7 @@ export function CampaignForm({
         <label className="block text-sm">
           <span className="font-medium">Total budget (cents)</span>
           <input
-            className="mt-1 w-full rounded-md border px-3 py-2"
+            className="mt-1 w-full rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-slate-900 placeholder:text-slate-500"
             type="number"
             min="0"
             {...form.register("totalBudget", { valueAsNumber: true })}
@@ -97,9 +97,12 @@ export function CampaignForm({
 
       <label className="block text-sm">
         <span className="font-medium">Status</span>
-        <select className="mt-1 w-full rounded-md border px-3 py-2" {...form.register("status")}>
+        <select
+          className="mt-1 w-full appearance-auto rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-slate-900 [color-scheme:light]"
+          {...form.register("status")}
+        >
           {campaignStatuses.map((status) => (
-            <option key={status} value={status}>
+            <option className="bg-slate-100 text-slate-900" key={status} value={status}>
               {status}
             </option>
           ))}
@@ -111,7 +114,7 @@ export function CampaignForm({
         <label className="block text-sm">
           <span className="font-medium">Starts at</span>
           <input
-            className="mt-1 w-full rounded-md border px-3 py-2"
+            className="mt-1 w-full rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-slate-900 [color-scheme:light] [&::-webkit-calendar-picker-indicator]:opacity-100"
             type="datetime-local"
             defaultValue={dateInputValue(initialValues?.startsAt ?? defaultValues.startsAt)}
             {...form.register("startsAt", { valueAsDate: true })}
@@ -121,7 +124,7 @@ export function CampaignForm({
         <label className="block text-sm">
           <span className="font-medium">Ends at</span>
           <input
-            className="mt-1 w-full rounded-md border px-3 py-2"
+            className="mt-1 w-full rounded-md border border-slate-300 bg-slate-100 px-3 py-2 text-slate-900 [color-scheme:light] [&::-webkit-calendar-picker-indicator]:opacity-100"
             type="datetime-local"
             defaultValue={dateInputValue(initialValues?.endsAt ?? defaultValues.endsAt)}
             {...form.register("endsAt", { valueAsDate: true })}

@@ -39,7 +39,7 @@ export function SubmissionForm({
       <label className="block text-sm">
         <span className="font-medium">Post URL</span>
         <input
-          className="mt-1 w-full rounded-md border px-3 py-2"
+          className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-foreground"
           placeholder="https://..."
           {...form.register("postUrl")}
         />
@@ -49,9 +49,12 @@ export function SubmissionForm({
       </label>
       <label className="block text-sm">
         <span className="font-medium">Platform</span>
-        <select className="mt-1 w-full rounded-md border px-3 py-2" {...form.register("platform")}>
+        <select
+          className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-foreground [color-scheme:dark]"
+          {...form.register("platform")}
+        >
           {platforms.map((platform) => (
-            <option key={platform} value={platform}>
+            <option className="bg-background text-foreground" key={platform} value={platform}>
               {platform}
             </option>
           ))}

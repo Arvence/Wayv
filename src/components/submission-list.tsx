@@ -4,6 +4,11 @@ import { useState } from "react";
 
 import { submissionStatuses } from "@/schemas/submission";
 import { trpc } from "@/trpc/client";
+import { CampaignDetailDialog } from "@/components/campaign-detail-dialog";
+import { getSubmissionStatusClasses } from "@/lib/submission-status";
+import { calculateBudgetImpactPercent } from "@/lib/budget-impact";
+import { Calendar, Eye } from "lucide-react";
+import { PlatformIcon } from "@/components/platform-icon";
 
 const statusLabels: Record<(typeof submissionStatuses)[number], string> = {
   pending: "pending",
@@ -16,6 +21,7 @@ export function SubmissionList() {
   const [status, setStatus] = useState<(typeof submissionStatuses)[number] | "">("");
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  const [detailCampaign, setDetailCampaign] = useState<string | null>(null);
   const me = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
   const submissions = trpc.submission.list.useQuery(
@@ -67,7 +73,10 @@ export function SubmissionList() {
 
       {approve.isError && (
         <p className="text-sm text-destructive" role="alert">
-          Could not approve submission: {approve.error.message}
+          {approve.error.data?.code === "CONFLICT" &&
+          approve.error.message.includes("BUDGET_EXCEEDED")
+            ? "This campaign does not have enough remaining budget to approve this submission."
+            : `Could not approve submission: ${approve.error.message}`}
         </p>
       )}
       {reject.isError && (
@@ -85,7 +94,7 @@ export function SubmissionList() {
         <p className="text-sm text-muted-foreground">No submissions found.</p>
       ) : (
         <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="w-full min-w-[1100px] text-left text-sm">
             <thead className="border-b text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 font-medium">Campaign</th>
@@ -93,6 +102,9 @@ export function SubmissionList() {
                 <th className="px-3 py-2 font-medium">Platform</th>
                 <th className="px-3 py-2 font-medium">Post URL</th>
                 <th className="px-3 py-2 font-medium">Status</th>
+                <th className="px-3 py-2 font-medium">Views</th>
+                <th className="px-3 py-2 font-medium">Estimated Payout</th>
+                <th className="px-3 py-2 font-medium">Budget Impact</th>
                 <th className="px-3 py-2 font-medium">Submitted At</th>
                 <th className="px-3 py-2 font-medium">Actions</th>
               </tr>
@@ -100,16 +112,31 @@ export function SubmissionList() {
             <tbody>
               {submissions.data.map((submission) => (
                 <tr key={submission.id} className="border-b last:border-0">
-                  <td className="px-3 py-3 font-medium">{submission.campaignTitle}</td>
+                  <td className="px-3 py-3 font-medium">
+                    <button
+                      className="cursor-pointer underline"
+                      type="button"
+                      onClick={() => setDetailCampaign(submission.campaignId)}
+                    >
+                      {submission.campaignTitle}
+                    </button>
+                  </td>
                   <td className="px-3 py-3">{submission.creatorEmail}</td>
-                  <td className="px-3 py-3 capitalize">{submission.platform}</td>
+                  <td className="px-3 py-3">
+                    <span className="inline-flex items-center gap-1 capitalize">
+                      <PlatformIcon platform={submission.platform} />
+                      {submission.platform}
+                    </span>
+                  </td>
                   <td className="max-w-56 truncate px-3 py-3">
                     <a className="underline" href={submission.postUrl} target="_blank" rel="noreferrer">
                       {submission.postUrl}
                     </a>
                   </td>
                   <td className="px-3 py-3">
-                    <span className="rounded-full border px-2 py-1 text-xs">
+                    <span
+                      className={`rounded-full border px-2 py-1 text-xs ${getSubmissionStatusClasses(submission.status)}`}
+                    >
                       {statusLabels[submission.status]}
                     </span>
                     {submission.rejectionReason && (
@@ -118,8 +145,53 @@ export function SubmissionList() {
                       </p>
                     )}
                   </td>
+                  <td className="px-3 py-3">
+                    <span className="inline-flex items-center gap-1">
+                      <Eye className="size-4" aria-hidden="true" />
+                      {submission.currentViews.toLocaleString()}
+                    </span>
+                    {submission.metricCapturedAt && (
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(submission.metricCapturedAt).toLocaleDateString()}
+                      </p>
+                    )}
+                  </td>
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    {(submission.estimatedPayoutCents / 100).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </td>
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    {submission.status !== "pending" && submission.status !== "approved" ? (
+                      "—"
+                    ) : (() => {
+                        const impact = calculateBudgetImpactPercent(
+                          submission.estimatedPayoutCents,
+                          submission.totalBudget,
+                        );
+
+                        const fitsBudget = submission.status === "approved" ||
+                          submission.estimatedPayoutCents <=
+                          submission.remainingBudgetCents;
+                        return (
+                          <span
+                            className={
+                              fitsBudget
+                                ? "rounded-md border border-emerald-400/30 bg-emerald-950/40 px-2 py-1 text-emerald-300"
+                                : "rounded-md border border-rose-400/30 bg-rose-950/40 px-2 py-1 text-rose-300"
+                            }
+                          >
+                            {impact.toFixed(1)}%
+                          </span>
+                        );
+                      })()}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-3">
-                    {new Date(submission.createdAt).toLocaleString()}
+                    <span className="inline-flex items-center gap-1">
+                      <Calendar className="size-4" aria-hidden="true" />
+                      {new Date(submission.createdAt).toLocaleString()}
+                    </span>
                   </td>
                   <td className="px-3 py-3">
                     {submission.status === "pending" && (
@@ -174,6 +246,10 @@ export function SubmissionList() {
           </table>
         </div>
       )}
+      <CampaignDetailDialog
+        campaignId={detailCampaign}
+        onClose={() => setDetailCampaign(null)}
+      />
     </section>
   );
 }

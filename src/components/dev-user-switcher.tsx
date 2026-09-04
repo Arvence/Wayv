@@ -1,21 +1,23 @@
 "use client";
 
-import { useQueryClient } from "@tanstack/react-query";
-
 import { trpc } from "@/trpc/client";
 
 export function DevUserSwitcher() {
-  const queryClient = useQueryClient();
-
   if (process.env.NODE_ENV === "production") {
     return null;
   }
 
   const devUsers = trpc.auth.devUsers.useQuery();
   const me = trpc.auth.me.useQuery();
+  const utils = trpc.useUtils();
   const switchUser = trpc.auth.switchUser.useMutation({
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: [["auth", "me"]] });
+      await utils.auth.me.invalidate();
+      await Promise.all([
+        utils.campaign.list.invalidate(),
+        utils.submission.list.invalidate(),
+        utils.submission.mine.invalidate(),
+      ]);
     },
   });
 
@@ -26,9 +28,9 @@ export function DevUserSwitcher() {
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded border bg-background p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
       <div className="flex flex-col gap-1">
-        <span className="font-medium">Dev user</span>
+        <span className="font-medium">Dev User</span>
         <span className="text-muted-foreground">
           {me.data ? `${me.data.email} (${me.data.role})` : "No active user"}
         </span>
@@ -40,7 +42,7 @@ export function DevUserSwitcher() {
         </label>
         <select
           id="dev-user-switcher"
-          className="rounded border bg-background px-2 py-1"
+          className="min-w-56 rounded border bg-background px-2 py-1"
           value={me.data?.id ?? ""}
           onChange={(event) => {
             const value = event.target.value;

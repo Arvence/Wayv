@@ -10,6 +10,10 @@ export const campaignListInputSchema = z.object({
   status: z.enum(campaignStatuses).optional(),
 });
 
+export const campaignDetailInputSchema = z.object({
+  campaignId: z.string().uuid(),
+});
+
 export const campaignFormSchema = z
   .object({
     title: z.string().trim().min(1).max(200),

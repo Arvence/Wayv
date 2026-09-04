@@ -6,6 +6,9 @@ import { campaignStatuses } from "@/schemas/campaign";
 import { trpc } from "@/trpc/client";
 import { CampaignForm } from "@/components/campaign-form";
 import { SubmissionForm } from "@/components/submission-form";
+import { CampaignDetailDialog } from "@/components/campaign-detail-dialog";
+import { Calendar } from "lucide-react";
+import { PlatformIcon } from "@/components/platform-icon";
 
 const statusLabels: Record<(typeof campaignStatuses)[number], string> = {
   draft: "Draft",
@@ -27,7 +30,9 @@ export function CampaignList() {
   const [editingCampaign, setEditingCampaign] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [submittingCampaign, setSubmittingCampaign] = useState<string | null>(null);
+  const [duplicateSubmissionOpen, setDuplicateSubmissionOpen] = useState(false);
   const [page, setPage] = useState(1);
+  const [detailCampaign, setDetailCampaign] = useState<string | null>(null);
   const me = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
   const campaigns = trpc.campaign.list.useQuery(
@@ -56,6 +61,11 @@ export function CampaignList() {
       setSubmittingCampaign(null);
       await utils.submission.mine.invalidate();
     },
+    onError: (error) => {
+      if (error.message === "DUPLICATE_SUBMISSION_URL") {
+        setDuplicateSubmissionOpen(true);
+      }
+    },
   });
 
   if (me.isPending) {
@@ -83,11 +93,33 @@ export function CampaignList() {
         <tbody>
           {campaigns.data?.items.map((campaign) => (
             <tr key={campaign.id} className="border-b last:border-0">
-              <td className="px-3 py-3 font-medium">{campaign.title}</td>
-              <td className="px-3 py-3 capitalize">{campaign.platforms.join(", ")}</td>
+              <td className="px-3 py-3 font-medium">
+                {adminView ? (
+                  <button
+                    className="cursor-pointer underline"
+                    type="button"
+                    onClick={() => setDetailCampaign(campaign.id)}
+                  >
+                    {campaign.title}
+                  </button>
+                ) : (
+                  campaign.title
+                )}
+              </td>
+              <td className="px-3 py-3">
+                <span className="inline-flex items-center gap-2">
+                  {campaign.platforms.map((platform) => (
+                    <span key={platform} className="inline-flex items-center gap-1">
+                      <PlatformIcon platform={platform} />
+                      <span className="capitalize">{platform}</span>
+                    </span>
+                  ))}
+                </span>
+              </td>
               <td className="px-3 py-3">{statusLabels[campaign.status]}</td>
               <td className="px-3 py-3">{formatCents(campaign.totalBudget)}</td>
               <td className="px-3 py-3 whitespace-nowrap">
+                <Calendar className="mr-1 inline size-4" aria-hidden="true" />
                 {new Date(campaign.startsAt).toLocaleDateString()} -{" "}
                 {new Date(campaign.endsAt).toLocaleDateString()}
               </td>
@@ -206,9 +238,9 @@ export function CampaignList() {
           Browse active campaigns and submit your clips.
         </p>
       </div>
-      {submitClip.isError && (
+      {submitClip.isError && submitClip.error.message !== "DUPLICATE_SUBMISSION_URL" && (
         <p className="text-sm text-destructive" role="alert">
-          Could not submit clip: {submitClip.error.message}
+          Could not submit the clip. Please try again.
         </p>
       )}
       {submitClip.isSuccess && (
@@ -227,6 +259,33 @@ export function CampaignList() {
           onCancel={() => setSubmittingCampaign(null)}
           onSubmit={(values) => submitClip.mutate(values)}
         />
+      )}
+      {duplicateSubmissionOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="duplicate-submission-title"
+        >
+          <div className="w-full max-w-sm rounded-xl border bg-card p-6 text-card-foreground shadow-lg">
+            <h3 id="duplicate-submission-title" className="text-lg font-semibold">
+              Duplicate clip
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This clip has already been submitted to this campaign.
+            </p>
+            <button
+              className="mt-5 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
+              type="button"
+              onClick={() => {
+                setDuplicateSubmissionOpen(false);
+                submitClip.reset();
+              }}
+            >
+              OK
+            </button>
+          </div>
+        </div>
       )}
     </>
   );
@@ -255,6 +314,10 @@ export function CampaignList() {
           </button>
         </div>
       )}
+      <CampaignDetailDialog
+        campaignId={detailCampaign}
+        onClose={() => setDetailCampaign(null)}
+      />
     </section>
   );
 }

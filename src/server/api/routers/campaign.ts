@@ -1,12 +1,14 @@
-import { and, eq, ilike, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
 import { adminProcedure, createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { campaigns } from "@/server/db/schema";
+import { campaigns, submissionMetrics, submissions, users } from "@/server/db/schema";
+import { calculatePayoutCents } from "@/server/payout";
 import {
   campaignFormSchema,
   campaignListInputSchema,
   campaignUpdateInputSchema,
+  campaignDetailInputSchema,
 } from "@/schemas/campaign";
 
 export const campaignRouter = createTRPCRouter({
@@ -87,5 +89,65 @@ export const campaignRouter = createTRPCRouter({
       }
 
       return campaign;
+    }),
+
+  detail: adminProcedure
+    .input(campaignDetailInputSchema)
+    .query(async ({ ctx, input }) => {
+      const [campaign] = await ctx.database
+        .select()
+        .from(campaigns)
+        .where(eq(campaigns.id, input.campaignId))
+        .limit(1);
+
+      if (!campaign) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Campaign not found." });
+      }
+
+      const latestMetrics = ctx.database
+        .selectDistinctOn([submissionMetrics.submissionId], {
+          submissionId: submissionMetrics.submissionId,
+          views: submissionMetrics.views,
+        })
+        .from(submissionMetrics)
+        .orderBy(submissionMetrics.submissionId, sql`${submissionMetrics.capturedAt} desc`)
+        .as("campaign_latest_metric");
+
+      const rows = await ctx.database
+        .select({
+          id: submissions.id,
+          creatorEmail: users.email,
+          platform: submissions.platform,
+          status: submissions.status,
+          postUrl: submissions.postUrl,
+          views: sql<number>`coalesce(${latestMetrics.views}, 0)`,
+          createdAt: submissions.createdAt,
+        })
+        .from(submissions)
+        .innerJoin(users, eq(submissions.creatorId, users.id))
+        .leftJoin(latestMetrics, eq(submissions.id, latestMetrics.submissionId))
+        .where(eq(submissions.campaignId, campaign.id))
+        .orderBy(desc(submissions.createdAt));
+
+      const spentCents = rows
+        .filter((submission) => submission.status === "approved")
+        .reduce(
+          (total, submission) =>
+            total + calculatePayoutCents(submission.views, campaign.payoutPer1kViews),
+          0,
+        );
+
+      return {
+        campaign,
+        submissions: rows.map((submission) => ({
+          ...submission,
+          estimatedPayoutCents: calculatePayoutCents(
+            submission.views,
+            campaign.payoutPer1kViews,
+          ),
+        })),
+        spentCents,
+        remainingCents: campaign.totalBudget - spentCents,
+      };
     }),
 });

@@ -20,12 +20,12 @@ export default function RootLayout({
       <body className="antialiased">
         <TRPCProvider>
           <div className="min-h-screen">
-            <header className="border-b bg-background/80">
-              <div className="mx-auto max-w-5xl px-4 py-3">
+            <header className="sticky top-0 z-50 border-b bg-background/95 shadow-sm backdrop-blur">
+              <div className="mx-auto w-full max-w-[1600px] px-6 py-3">
                 <DevUserSwitcher />
               </div>
             </header>
-            {children}
+            <div>{children}</div>
           </div>
         </TRPCProvider>
       </body>
