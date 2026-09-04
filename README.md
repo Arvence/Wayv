@@ -21,7 +21,7 @@ pnpm dev
 
 On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp .env.example .env`.
 
-Open [http://localhost:3000](http://localhost:3000). The health card confirms both the tRPC connection and PostgreSQL access.
+Open [http://localhost:5000](http://localhost:5000). The health card confirms both the tRPC connection and PostgreSQL access.
 
 ## Checks
 

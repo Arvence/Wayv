@@ -1,7 +1,7 @@
 import { and, eq, ilike, sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 
-import { adminProcedure, createTRPCRouter } from "@/server/api/trpc";
+import { adminProcedure, createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { campaigns } from "@/server/db/schema";
 import {
   campaignFormSchema,
@@ -10,7 +10,7 @@ import {
 } from "@/schemas/campaign";
 
 export const campaignRouter = createTRPCRouter({
-  list: adminProcedure
+  list: protectedProcedure
     .input(campaignListInputSchema)
     .query(async ({ ctx, input }) => {
       const whereClauses = [];
@@ -21,6 +21,10 @@ export const campaignRouter = createTRPCRouter({
 
       if (input.status) {
         whereClauses.push(eq(campaigns.status, input.status));
+      }
+
+      if (ctx.user.role === "creator") {
+        whereClauses.push(eq(campaigns.status, "active"));
       }
 
       const where = whereClauses.length > 0 ? and(...whereClauses) : undefined;

@@ -14,6 +14,7 @@ The initial schema and migration cover users, campaigns, submissions, and daily 
 - Host port 5433 is used because another local project already occupies 5432; PostgreSQL still listens on 5432 inside the container.
 - Docker Compose keeps the local database setup self-contained.
 - pnpm 11.25.0 is pinned for reproducible package-manager behavior.
+- New submissions receive one initial daily metric snapshot at creation time; this is an implementation assumption for pending submissions.
 
 ## Deferred work
 
