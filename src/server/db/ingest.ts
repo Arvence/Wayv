@@ -3,7 +3,8 @@ import { pathToFileURL } from "node:url";
 
 import { database } from "@/server/db/client";
 import { generateNextMetric } from "@/server/db/metrics";
-import { submissionMetrics, submissions } from "@/server/db/schema";
+import { campaigns, submissionMetrics, submissions } from "@/server/db/schema";
+import { calculatePayoutCents } from "@/server/payout";
 
 type ApprovedSubmission = typeof submissions.$inferSelect;
 
@@ -28,7 +29,8 @@ export async function processApprovedSubmission(
   submission: ApprovedSubmission,
   capturedAt: string,
 ) {
-  const [existing] = await db
+  return db.transaction(async (tx) => {
+  const [existing] = await tx
     .select({ id: submissionMetrics.id })
     .from(submissionMetrics)
     .where(
@@ -43,7 +45,7 @@ export async function processApprovedSubmission(
     return "skipped" as const;
   }
 
-  const [previous] = await db
+  const [previous] = await tx
     .select({
       views: submissionMetrics.views,
       likes: submissionMetrics.likes,
@@ -58,18 +60,66 @@ export async function processApprovedSubmission(
     throw new Error("No previous metric exists.");
   }
 
-  await db
+  const [campaign] = await tx
+    .select()
+    .from(campaigns)
+    .where(eq(campaigns.id, submission.campaignId))
+    .for("update")
+    .limit(1);
+  if (!campaign) throw new Error("Campaign not found.");
+
+  const latestMetrics = tx
+    .selectDistinctOn([submissionMetrics.submissionId], {
+      submissionId: submissionMetrics.submissionId,
+      views: submissionMetrics.views,
+    })
+    .from(submissionMetrics)
+    .orderBy(submissionMetrics.submissionId, desc(submissionMetrics.capturedAt))
+    .as("ingest_latest_metric");
+  const approved = await tx
+    .select({ submissionId: submissions.id, views: latestMetrics.views })
+    .from(submissions)
+    .leftJoin(latestMetrics, eq(submissions.id, latestMetrics.submissionId))
+    .where(and(eq(submissions.campaignId, campaign.id), eq(submissions.status, "approved")));
+  const generated = generateNextMetric(previous);
+  const otherSpend = approved
+    .filter((row) => row.submissionId !== submission.id)
+    .reduce(
+      (total, row) =>
+        total + calculatePayoutCents(Number(row.views ?? 0), campaign.payoutPer1kViews),
+      0,
+    );
+  const available = Math.max(campaign.totalBudget - otherSpend, 0);
+  const maxAffordableViews =
+    campaign.payoutPer1kViews === 0
+      ? generated.views
+      : Math.floor(available / campaign.payoutPer1kViews) * 1_000;
+  const safeViews = Math.max(
+    Number(previous.views),
+    Math.min(generated.views, maxAffordableViews),
+  );
+
+  await tx
     .insert(submissionMetrics)
     .values({
       submissionId: submission.id,
       capturedAt,
-      ...generateNextMetric(previous),
+      ...generated,
+      views: safeViews,
     })
     .onConflictDoNothing({
       target: [submissionMetrics.submissionId, submissionMetrics.capturedAt],
     });
 
+  const spent = approved.reduce((total, row) => {
+    const views = row.submissionId === submission.id ? safeViews : Number(row.views ?? 0);
+    return total + calculatePayoutCents(views, campaign.payoutPer1kViews);
+  }, 0);
+  if (spent === campaign.totalBudget) {
+    await tx.update(campaigns).set({ status: "completed" }).where(eq(campaigns.id, campaign.id));
+  }
   return "inserted" as const;
+  });
 }
 
 async function ingest() {

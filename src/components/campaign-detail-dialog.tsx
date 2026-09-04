@@ -4,6 +4,7 @@ import { trpc } from "@/trpc/client";
 import { getSubmissionStatusClasses } from "@/lib/submission-status";
 import { calculateBudgetPercentage } from "@/lib/budget-impact";
 import { Calendar, Eye } from "lucide-react";
+import { calculateViewsTrend } from "@/lib/approved-views";
 
 function formatCents(value: number) {
   return (value / 100).toLocaleString(undefined, {
@@ -98,6 +99,13 @@ export function CampaignDetailDialog({
       })
     : [];
 
+  const viewsTrend = detail.data
+    ? calculateViewsTrend(
+        detail.data.latestApprovedViewsTotal,
+        detail.data.previousApprovedViewsTotal,
+      )
+    : null;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
@@ -108,7 +116,7 @@ export function CampaignDetailDialog({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-card p-6 text-card-foreground shadow-lg">
+      <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border bg-card p-6 text-card-foreground shadow-lg [scrollbar-color:rgb(100_116_139)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:hover:bg-slate-400 [&::-webkit-scrollbar-track]:bg-slate-900/40">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <h2 id="campaign-detail-title" className="text-lg font-semibold">
@@ -154,6 +162,45 @@ export function CampaignDetailDialog({
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
+              <p className="rounded-md border border-sky-400/20 bg-sky-950/20 p-4 text-sm sm:col-span-2">
+                <span className="block text-muted-foreground">Total approved views</span>
+                <span className="mt-1 flex items-baseline gap-3">
+                  <strong className="text-2xl">
+                    {detail.data.totalApprovedViews.toLocaleString()}
+                  </strong>
+                  {viewsTrend === null ? (
+                    detail.data.previousApprovedViewsTotal === 0 &&
+                    detail.data.latestApprovedViewsTotal ? (
+                      <span className="inline-flex items-center gap-1 text-xs text-emerald-300">
+                        <svg className="size-3.5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <path d="M8 13V3M4 7l4-4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        New activity
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        No previous activity
+                      </span>
+                    )
+                  ) : viewsTrend > 0 ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-300">
+                      <svg className="size-3.5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M8 13V3M4 7l4-4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      {viewsTrend.toFixed(1)}%
+                    </span>
+                  ) : viewsTrend < 0 ? (
+                    <span className="inline-flex items-center gap-1 text-xs text-rose-300">
+                      <svg className="size-3.5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                        <path d="M8 3v10m4-4-4 4-4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      {Math.abs(viewsTrend).toFixed(1)}%
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">0.0%</span>
+                  )}
+                </span>
+              </p>
               <p className="rounded-md border p-3 text-sm">
                 <span className="block text-muted-foreground">Payout / 1k views</span>
                 <strong>{formatCents(detail.data.campaign.payoutPer1kViews)}</strong>
@@ -198,6 +245,51 @@ export function CampaignDetailDialog({
                   ).toFixed(1)}%
                 </span>
               </p>
+            </div>
+
+            <div className="rounded-lg border p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-medium">Daily views</h3>
+                <span className="text-xs text-muted-foreground">Approved submissions</span>
+              </div>
+              <div className="mt-4 overflow-x-auto pb-2 [scrollbar-color:rgb(100_116_139)_transparent] [scrollbar-width:thin] hover:[scrollbar-color:rgb(148_163_184)_transparent] [&::-webkit-scrollbar]:h-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:hover:bg-slate-400 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-900/60">
+                <div className="flex min-w-max items-end gap-2">
+                  {(() => {
+                    const maxViews = Math.max(
+                      ...detail.data.dailyViews.map((item) => item.views),
+                      1,
+                    );
+
+                    return detail.data.dailyViews.map((item) => (
+                      <div key={item.date} className="flex w-12 flex-col items-center gap-1">
+                        <span className="text-[10px] text-muted-foreground">
+                          {item.views > 0 ? item.views.toLocaleString() : "No activity"}
+                        </span>
+                        <div className="flex h-32 items-end">
+                          <div
+                            className={`w-7 rounded-t ${
+                              item.views > 0
+                                ? "bg-emerald-400/70"
+                                : "border border-dashed border-slate-600 bg-slate-800/40"
+                            }`}
+                            style={{
+                              height: `${Math.max((item.views / maxViews) * 100, item.views > 0 ? 4 : 0)}%`,
+                            }}
+                            title={`${item.date}: ${item.views.toLocaleString()} views`}
+                          />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(`${item.date}T00:00:00Z`).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            timeZone: "UTC",
+                          })}
+                        </span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
             </div>
 
             <div>

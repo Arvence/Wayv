@@ -263,7 +263,7 @@ export const submissionRouter = createTRPCRouter({
           .orderBy(desc(submissionMetrics.capturedAt))
           .limit(1);
         const candidatePayoutCents = calculatePayoutCents(
-          candidateMetric?.views ?? 0,
+          Number(candidateMetric?.views ?? 0),
           submission.campaign.payoutPer1kViews,
         );
 
@@ -292,7 +292,7 @@ export const submissionRouter = createTRPCRouter({
           (total, approved) =>
             total +
             calculatePayoutCents(
-              approved.views ?? 0,
+              Number(approved.views ?? 0),
               submission.campaign.payoutPer1kViews,
             ),
           0,
@@ -330,22 +330,6 @@ export const submissionRouter = createTRPCRouter({
   reject: adminProcedure
     .input(submissionRejectInputSchema)
     .mutation(async ({ ctx, input }) => {
-      const [submission] = await ctx.database
-        .select()
-        .from(submissions)
-        .where(eq(submissions.id, input.submissionId))
-        .limit(1);
-
-      if (!submission) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Submission not found." });
-      }
-      if (submission.status !== "pending") {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Only pending submissions can be rejected.",
-        });
-      }
-
       const [updatedSubmission] = await ctx.database
         .update(submissions)
         .set({
@@ -353,13 +337,18 @@ export const submissionRouter = createTRPCRouter({
           rejectionReason: input.rejectionReason,
           updatedAt: new Date(),
         })
-        .where(eq(submissions.id, input.submissionId))
+        .where(
+          and(
+            eq(submissions.id, input.submissionId),
+            eq(submissions.status, "pending"),
+          ),
+        )
         .returning();
 
       if (!updatedSubmission) {
         throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Submission could not be rejected.",
+          code: "CONFLICT",
+          message: "Only pending submissions can be rejected.",
         });
       }
       return updatedSubmission;

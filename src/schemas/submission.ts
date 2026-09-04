@@ -8,6 +8,27 @@ export const submissionFormSchema = z.object({
   campaignId: z.string().uuid(),
   postUrl: z.string().trim().url().max(2048),
   platform: z.enum(campaignPlatforms),
+}).superRefine(({ postUrl, platform }, context) => {
+  const url = new URL(postUrl);
+  const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+  const path = url.pathname;
+  const valid =
+    url.protocol === "http:" || url.protocol === "https:"
+      ? platform === "youtube"
+        ? (hostname === "youtube.com" && /^\/(watch|shorts)\/?/.test(path) && (path.startsWith("/shorts/") || url.searchParams.has("v"))) ||
+          (hostname === "youtu.be" && path.length > 1)
+        : platform === "tiktok"
+          ? hostname === "tiktok.com" && /^\/@[^/]+\/video\/[^/]+/.test(path)
+          : hostname === "instagram.com" && /^\/(p|reel)\/[^/]+/.test(path)
+      : false;
+
+  if (!valid) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["postUrl"],
+      message: "Enter a valid post URL for the selected platform.",
+    });
+  }
 });
 
 export const submissionListInputSchema = z.object({

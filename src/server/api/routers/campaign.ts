@@ -5,6 +5,11 @@ import { adminProcedure, createTRPCRouter, protectedProcedure } from "@/server/a
 import { campaigns, submissionMetrics, submissions, users } from "@/server/db/schema";
 import { calculatePayoutCents } from "@/server/payout";
 import {
+  calculateTotalApprovedViews,
+  getLatestCumulativeApprovedViews,
+  getLatestActiveDailyViews,
+} from "@/lib/approved-views";
+import {
   campaignFormSchema,
   campaignListInputSchema,
   campaignUpdateInputSchema,
@@ -73,23 +78,68 @@ export const campaignRouter = createTRPCRouter({
     }),
   update: adminProcedure
     .input(campaignUpdateInputSchema)
-    .mutation(async ({ ctx, input }) => {
-      const { id, ...values } = input;
-      const [campaign] = await ctx.database
-        .update(campaigns)
-        .set({ ...values, updatedAt: new Date() })
-        .where(eq(campaigns.id, id))
-        .returning();
+    .mutation(async ({ ctx, input }) =>
+      ctx.database.transaction(async (tx) => {
+        const [currentCampaign] = await tx
+          .select()
+          .from(campaigns)
+          .where(eq(campaigns.id, input.id))
+          .for("update")
+          .limit(1);
 
-      if (!campaign) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Campaign not found.",
-        });
-      }
+        if (!currentCampaign) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Campaign not found." });
+        }
 
-      return campaign;
-    }),
+        const proposedPayout = input.payoutPer1kViews ?? currentCampaign.payoutPer1kViews;
+        const proposedBudget = input.totalBudget ?? currentCampaign.totalBudget;
+        const latestMetrics = tx
+          .selectDistinctOn([submissionMetrics.submissionId], {
+            submissionId: submissionMetrics.submissionId,
+            views: submissionMetrics.views,
+          })
+          .from(submissionMetrics)
+          .orderBy(submissionMetrics.submissionId, sql`${submissionMetrics.capturedAt} desc`)
+          .as("campaign_update_latest_metric");
+        const approved = await tx
+          .select({ views: latestMetrics.views })
+          .from(submissions)
+          .leftJoin(latestMetrics, eq(submissions.id, latestMetrics.submissionId))
+          .where(
+            and(
+              eq(submissions.campaignId, input.id),
+              eq(submissions.status, "approved"),
+            ),
+          );
+        const proposedSpend = approved.reduce(
+          (total, row) => total + calculatePayoutCents(Number(row.views ?? 0), proposedPayout),
+          0,
+        );
+
+        if (proposedSpend > proposedBudget) {
+          throw new TRPCError({ code: "CONFLICT", message: "CAMPAIGN_BUDGET_CONFLICT" });
+        }
+
+        const { id, ...values } = input;
+        const [campaign] = await tx
+          .update(campaigns)
+          .set({
+            ...values,
+            status:
+              proposedSpend === proposedBudget
+                ? "completed"
+                : values.status ?? currentCampaign.status,
+            updatedAt: new Date(),
+          })
+          .where(eq(campaigns.id, id))
+          .returning();
+
+        if (!campaign) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Campaign not found." });
+        }
+        return campaign;
+      }),
+    ),
 
   detail: adminProcedure
     .input(campaignDetailInputSchema)
@@ -129,6 +179,21 @@ export const campaignRouter = createTRPCRouter({
         .where(eq(submissions.campaignId, campaign.id))
         .orderBy(desc(submissions.createdAt));
 
+      const approvedMetricRows = await ctx.database
+        .select({
+          submissionId: submissionMetrics.submissionId,
+          capturedAt: submissionMetrics.capturedAt,
+          views: submissionMetrics.views,
+        })
+        .from(submissionMetrics)
+        .innerJoin(submissions, eq(submissionMetrics.submissionId, submissions.id))
+        .where(
+          and(
+            eq(submissions.campaignId, campaign.id),
+            eq(submissions.status, "approved"),
+          ),
+        );
+
       const spentCents = rows
         .filter((submission) => submission.status === "approved")
         .reduce(
@@ -136,6 +201,37 @@ export const campaignRouter = createTRPCRouter({
             total + calculatePayoutCents(submission.views, campaign.payoutPer1kViews),
           0,
         );
+
+      const dailyViewsMap = new Map<string, number>();
+      for (const metric of approvedMetricRows) {
+        dailyViewsMap.set(
+          metric.capturedAt,
+          (dailyViewsMap.get(metric.capturedAt) ?? 0) + Number(metric.views),
+        );
+      }
+
+      const startDate = new Date(campaign.startsAt);
+      const endDate = new Date(campaign.endsAt);
+      const dailyViews: { date: string; views: number }[] = [];
+      const currentDate = new Date(
+        Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate()),
+      );
+      const lastDate = new Date(
+        Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate()),
+      );
+
+      while (currentDate <= lastDate) {
+        const date = currentDate.toISOString().slice(0, 10);
+        dailyViews.push({ date, views: dailyViewsMap.get(date) ?? 0 });
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+      }
+
+      const { latest: latestDailyViews, previous: previousDailyViews } =
+        getLatestActiveDailyViews(dailyViews);
+      const {
+        latest: latestApprovedViewsTotal,
+        previous: previousApprovedViewsTotal,
+      } = getLatestCumulativeApprovedViews(approvedMetricRows);
 
       return {
         campaign,
@@ -148,6 +244,12 @@ export const campaignRouter = createTRPCRouter({
         })),
         spentCents,
         remainingCents: campaign.totalBudget - spentCents,
+        totalApprovedViews: calculateTotalApprovedViews(rows),
+        dailyViews,
+        latestDailyViews,
+        previousDailyViews,
+        latestApprovedViewsTotal,
+        previousApprovedViewsTotal,
       };
     }),
 });
