@@ -40,7 +40,14 @@ describe("ingest budget growth safety", () => {
     ]);
 
     try {
-      await processApprovedSubmission(database, submissionA, "2026-09-04");
+      const firstResult = await processApprovedSubmission(database, submissionA, "2026-09-04");
+      const firstTarget = (
+        await database.select().from(submissionMetrics).where(
+          eq(submissionMetrics.submissionId, submissionA.id),
+        )
+      ).find((metric) => metric.capturedAt === "2026-09-04");
+      if (!firstTarget) throw new Error("Target metric was not created.");
+      const secondResult = await processApprovedSubmission(database, submissionA, "2026-09-04");
       const metrics = await database.select().from(submissionMetrics).where(
         eq(submissionMetrics.submissionId, submissionA.id),
       );
@@ -52,6 +59,15 @@ describe("ingest budget growth safety", () => {
       const latestA = metrics.sort((first, second) => second.capturedAt.localeCompare(first.capturedAt))[0]!;
       const totalSpend = calculatePayoutCents(Number(latestA.views), 100) + 400;
 
+      expect(firstResult).toBe("inserted");
+      expect(secondResult).toBe("skipped");
+      const targetMetrics = metrics.filter((metric) => metric.capturedAt === "2026-09-04");
+      expect(targetMetrics).toHaveLength(1);
+      expect(targetMetrics[0]).toMatchObject({
+        views: firstTarget.views,
+        likes: firstTarget.likes,
+        comments: firstTarget.comments,
+      });
       expect(Number(latestA.views)).toBeGreaterThanOrEqual(5_000);
       expect(totalSpend).toBeLessThanOrEqual(1_000);
       expect(spent.length).toBe(2);

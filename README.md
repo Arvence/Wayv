@@ -1,35 +1,32 @@
-# Full-stack Project
+# Wavy Take-home
 
-A reusable full-stack application foundation with database connectivity, an initial campaign and submission schema, and a tRPC health check. Product features are intentionally deferred.
+Campaign marketplace take-home with admin/creator flows,
+budget-safe approvals, daily metrics and payout calculation.
 
 ## Requirements
+Node
+pnpm
+Docker
 
-- Node.js 20.19+, 22.12+, or 24+
-- pnpm 11.25.0 (declared in `package.json`)
-- Docker with Docker Compose
+## Setup
 
-## Fresh clone setup
-
-```bash
 corepack enable
 pnpm install
 cp .env.example .env
 pnpm db:up
 pnpm db:migrate
+pnpm db:seed
+pnpm test
 pnpm dev
-```
 
-On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp .env.example .env`.
+Windows PowerShell copy command...
 
-Open [http://localhost:5000](http://localhost:5000). The health card confirms both the tRPC connection and PostgreSQL access.
+Open localhost:5000
 
-## Checks
-
-```bash
+## Useful commands
+pnpm ingest
 pnpm test
 pnpm typecheck
 pnpm lint
 pnpm build
-```
-
-Stop PostgreSQL with `pnpm db:down`.
+pnpm db:down

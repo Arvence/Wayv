@@ -11,6 +11,7 @@ export default defineConfig({
   test: {
     clearMocks: true,
     environment: "node",
+    fileParallelism: false,
     include: ["src/**/*.test.ts"],
     setupFiles: ["./src/test/setup.ts"],
   },
